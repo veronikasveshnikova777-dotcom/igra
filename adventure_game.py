@@ -8,13 +8,14 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, DirectionalLight, Vec3, Vec4, TextNode,
     CollisionTraverser, CollisionSphere, CollisionNode,
-    CollisionHandlerEvent
+    CollisionHandlerEvent, Texture, TextureStage
 )
 from direct.gui.OnscreenText import OnscreenText
 from direct.interval.IntervalGlobal import Sequence, LerpHprInterval
 import sys
 import random
 import math
+import os
 
 class AdventureGame(ShowBase):
     def __init__(self):
@@ -31,6 +32,13 @@ class AdventureGame(ShowBase):
         self.obstacles = []
         self.current_house = None
         
+        # Jump mechanics
+        self.is_jumping = False
+        self.jump_velocity = 0
+        self.gravity = -0.8
+        self.jump_strength = 12
+        self.ground_level = 1
+        
         # Movement keys
         self.keys = {
             'w': False, 'a': False, 's': False, 'd': False,
@@ -39,6 +47,7 @@ class AdventureGame(ShowBase):
         
         # Setup game
         self.setup_lighting()
+        self.load_textures()
         self.setup_scene()
         self.setup_player()
         self.setup_collectibles()
@@ -72,6 +81,33 @@ class AdventureGame(ShowBase):
         dlight2NP = self.render.attachNewNode(dlight2)
         self.render.setLight(dlight2NP)
     
+    def load_textures(self):
+        """Загрузка текстур из файлов"""
+        self.textures = {}
+        
+        texture_files = {
+            'grass': 'grass.jpg',
+            'dirt': 'dirt.jpg',
+            'stone': 'stone.jpg',
+            'house': 'house.jpg'
+        }
+        
+        for tex_name, tex_file in texture_files.items():
+            try:
+                # Используем относительный путь для Panda3D
+                texture = self.loader.loadTexture(tex_file)
+                if texture:
+                    texture.setWrapU(Texture.WMRepeat)
+                    texture.setWrapV(Texture.WMRepeat)
+                    texture.setMagfilter(Texture.FTLinear)
+                    texture.setMinfilter(Texture.FTLinearMipmapLinear)
+                    self.textures[tex_name] = texture
+                    print(f"✓ Текстура {tex_name} загружена из {tex_file}")
+                else:
+                    print(f"✗ Не удалось загрузить текстуру {tex_name}")
+            except Exception as e:
+                print(f"✗ Ошибка загрузки текстуры {tex_name}: {e}")
+    
     def setup_scene(self):
         """Create detailed game world"""
         # Load environment or create fallback
@@ -95,10 +131,19 @@ class AdventureGame(ShowBase):
                 ground.reparentTo(self.render)
                 ground.setScale(25, 25, 0.5)
                 ground.setPos(0, 0, -0.5)
-                ground.setColor(0.3, 0.7, 0.3, 1)
+                
+                # Применяем текстуру травы
+                if 'grass' in self.textures:
+                    ground.clearTexture()
+                    ground.setTexture(self.textures['grass'], 1)
+                    ground.setTexScale(TextureStage.getDefault(), 10, 10)
+                    print("✓ Текстура травы применена к земле")
+                else:
+                    ground.setColor(0.3, 0.7, 0.3, 1)
+                
                 ground.setShaderAuto()
-        except:
-            pass
+        except Exception as e:
+            print(f"✗ Ошибка создания земли: {e}")
         
         # Create maze-like structure
         wall_positions = [
@@ -116,10 +161,20 @@ class AdventureGame(ShowBase):
                     wall.reparentTo(self.render)
                     wall.setScale(1, 1, 3)
                     wall.setPos(pos[0], pos[1], pos[2])
-                    wall.setColor(0.6, 0.4, 0.2, 1)
+                    
+                    # Применяем текстуру камня к стенам
+                    if 'stone' in self.textures:
+                        wall.clearTexture()
+                        wall.setTexture(self.textures['stone'], 1)
+                        wall.setTexScale(TextureStage.getDefault(), 2, 3)
+                        print("✓ Текстура камня применена к стене")
+                    else:
+                        wall.setColor(0.6, 0.4, 0.2, 1)
+                    
                     wall.setShaderAuto()
                     self.obstacles.append(wall)
-            except:
+            except Exception as e:
+                print(f"✗ Ошибка создания стены: {e}")
                 continue
         
         # Decorative elements
@@ -185,7 +240,16 @@ class AdventureGame(ShowBase):
                     house_base.reparentTo(self.render)
                     house_base.setScale(2.5, 2.5, 3)
                     house_base.setPos(house_info['pos'][0], house_info['pos'][1], 1.5)
-                    house_base.setColor(*house_info['color'], 1)
+                    
+                    # Применяем текстуру дома
+                    if 'house' in self.textures:
+                        house_base.clearTexture()
+                        house_base.setTexture(self.textures['house'], 1)
+                        house_base.setTexScale(TextureStage.getDefault(), 1, 1)
+                        print(f"✓ Текстура применена к дому: {house_info['name']}")
+                    else:
+                        house_base.setColor(*house_info['color'], 1)
+                    
                     house_base.setShaderAuto()
                     self.houses.append({'model': house_base, 'name': house_info['name'], 'pos': house_info['pos']})
                 
@@ -195,7 +259,16 @@ class AdventureGame(ShowBase):
                     roof.reparentTo(self.render)
                     roof.setScale(3, 3, 0.5)
                     roof.setPos(house_info['pos'][0], house_info['pos'][1], 3.5)
-                    roof.setColor(0.5, 0.2, 0.1, 1)
+                    
+                    # Применяем текстуру земли для крыши
+                    if 'dirt' in self.textures:
+                        roof.clearTexture()
+                        roof.setTexture(self.textures['dirt'], 1)
+                        roof.setTexScale(TextureStage.getDefault(), 2, 2)
+                        print(f"✓ Текстура крыши применена")
+                    else:
+                        roof.setColor(0.5, 0.2, 0.1, 1)
+                    
                     roof.setHpr(0, 0, 45)
                     roof.setShaderAuto()
                 
@@ -228,7 +301,16 @@ class AdventureGame(ShowBase):
                 fountain_base.reparentTo(self.render)
                 fountain_base.setScale(2, 2, 0.5)
                 fountain_base.setPos(0, 0, 0.25)
-                fountain_base.setColor(0.4, 0.4, 0.5, 1)
+                
+                # Применяем текстуру камня
+                if 'stone' in self.textures:
+                    fountain_base.clearTexture()
+                    fountain_base.setTexture(self.textures['stone'], 1)
+                    fountain_base.setTexScale(TextureStage.getDefault(), 2, 2)
+                    print("✓ Текстура камня применена к фонтану")
+                else:
+                    fountain_base.setColor(0.4, 0.4, 0.5, 1)
+                
                 fountain_base.setShaderAuto()
             
             # Бассейн фонтана
@@ -246,7 +328,15 @@ class AdventureGame(ShowBase):
                 fountain_pillar.reparentTo(self.render)
                 fountain_pillar.setScale(0.3, 0.3, 2)
                 fountain_pillar.setPos(0, 0, 1.5)
-                fountain_pillar.setColor(0.7, 0.7, 0.8, 1)
+                
+                # Применяем текстуру камня
+                if 'stone' in self.textures:
+                    fountain_pillar.clearTexture()
+                    fountain_pillar.setTexture(self.textures['stone'], 1)
+                    fountain_pillar.setTexScale(TextureStage.getDefault(), 1, 4)
+                else:
+                    fountain_pillar.setColor(0.7, 0.7, 0.8, 1)
+                
                 fountain_pillar.setShaderAuto()
             
             # Верх фонтана
@@ -261,8 +351,8 @@ class AdventureGame(ShowBase):
                 # Анимация вращения
                 spin = LerpHprInterval(fountain_top, 4, Vec3(360, 0, 0))
                 spin.loop()
-        except:
-            pass
+        except Exception as e:
+            print(f"✗ Ошибка создания фонтана: {e}")
     
     def create_lanterns(self):
         """Создаём декоративные фонари"""
@@ -351,7 +441,14 @@ class AdventureGame(ShowBase):
                 pedestal_base.reparentTo(self.render)
                 pedestal_base.setScale(1.5, 1.5, 0.3)
                 pedestal_base.setPos(-2, -6, 0.3)
-                pedestal_base.setColor(0.3, 0.3, 0.3, 1)
+                
+                # Применяем текстуру камня
+                if 'stone' in self.textures:
+                    pedestal_base.setTexture(self.textures['stone'])
+                    pedestal_base.setTexScale(TextureStage.getDefault(), 1, 1)
+                else:
+                    pedestal_base.setColor(0.3, 0.3, 0.3, 1)
+                
                 pedestal_base.setShaderAuto()
             
             # Столб пьедестала
@@ -360,7 +457,14 @@ class AdventureGame(ShowBase):
                 pedestal_pillar.reparentTo(self.render)
                 pedestal_pillar.setScale(0.4, 0.4, 2.5)
                 pedestal_pillar.setPos(-2, -6, 1.5)
-                pedestal_pillar.setColor(0.5, 0.5, 0.5, 1)
+                
+                # Применяем текстуру камня
+                if 'stone' in self.textures:
+                    pedestal_pillar.setTexture(self.textures['stone'])
+                    pedestal_pillar.setTexScale(TextureStage.getDefault(), 1, 5)
+                else:
+                    pedestal_pillar.setColor(0.5, 0.5, 0.5, 1)
+                
                 pedestal_pillar.setShaderAuto()
             
             # Верхняя площадка
@@ -417,6 +521,9 @@ class AdventureGame(ShowBase):
         self.accept("arrow_right", self.set_key, ["right", True])
         self.accept("arrow_right-up", self.set_key, ["right", False])
         
+        # Jump control
+        self.accept("space", self.jump)
+        
         self.accept("escape", self.exit_game)
         self.accept("r", self.reset_game)
     
@@ -431,7 +538,7 @@ class AdventureGame(ShowBase):
         )
         
         self.instructions = OnscreenText(
-            text="WASD/Arrows: Move\\nCollect all coins!\\nR: Reset, ESC: Exit",
+            text="WASD/Arrows: Движение\\nSPACE: Прыжок\\nСобирай монетки!\\nИсследуй дома!\\nR: Перезапуск, ESC: Выход",
             style=1,
             fg=(1, 1, 1, 1),
             pos=(-1.3, -0.7),
@@ -448,7 +555,7 @@ class AdventureGame(ShowBase):
         
         coins_left = len(self.coins)
         self.score_text = OnscreenText(
-            text=f"Score: {self.score}\\nCoins left: {coins_left}",
+            text=f"Очки: {self.score}\\nМонеток осталось: {coins_left}",
             style=1,
             fg=(1, 1, 0, 1),
             pos=(1.2, 0.8),
@@ -459,6 +566,14 @@ class AdventureGame(ShowBase):
     def set_key(self, key, value):
         """Handle key input"""
         self.keys[key] = value
+    
+    def jump(self):
+        """Handle jump action"""
+        # Можно прыгать только если на земле
+        if not self.is_jumping and self.player_pos.z <= self.ground_level + 0.1:
+            self.is_jumping = True
+            self.jump_velocity = self.jump_strength
+            print("Прыжок!")
     
     def update_camera(self):
         """Smooth camera following"""
@@ -533,25 +648,35 @@ class AdventureGame(ShowBase):
             return
             
         self.victory_text = OnscreenText(
-            text="CONGRATULATIONS!\\nYou collected all coins!\\nPress R to play again",
+            text="ПОЗДРАВЛЯЕМ!\\nВы собрали все монетки!\\nНажмите R для новой игры",
             style=1,
             fg=(1, 1, 0, 1),
             pos=(0, 0),
             scale=0.1,
             align=TextNode.ACenter
         )
-        print("Victory! All coins collected!")
+        print("Победа! Все монетки собраны!")
     
     def reset_game(self):
         """Reset the game"""
-        print("Resetting game...")
+        print("Перезапуск игры...")
         self.score = 0
         self.player_pos = Vec3(0, 0, 1)
+        
+        # Reset jump state
+        self.is_jumping = False
+        self.jump_velocity = 0
         
         # Remove victory text
         if hasattr(self, 'victory_text'):
             self.victory_text.destroy()
             delattr(self, 'victory_text')
+        
+        # Remove house hint
+        if hasattr(self, 'house_hint'):
+            self.house_hint.destroy()
+            delattr(self, 'house_hint')
+        self.current_house = None
         
         # Recreate coins
         for coin in self.coins:
@@ -591,6 +716,20 @@ class AdventureGame(ShowBase):
         if self.keys['d'] or self.keys['right']:
             new_pos.x += move_speed
         
+        # Handle jump physics
+        if self.is_jumping:
+            self.jump_velocity += self.gravity
+            new_pos.z += self.jump_velocity * 0.05
+            
+            # Проверка приземления
+            if new_pos.z <= self.ground_level:
+                new_pos.z = self.ground_level
+                self.is_jumping = False
+                self.jump_velocity = 0
+        else:
+            # Убедимся, что игрок на земле
+            new_pos.z = self.ground_level
+        
         # Check collisions before moving
         if not self.check_collision_with_obstacles(new_pos):
             self.player_pos = new_pos
@@ -610,16 +749,18 @@ class AdventureGame(ShowBase):
     
     def exit_game(self):
         """Exit the game"""
-        print(f"Game Over! Final Score: {self.score}")
+        print(f"Игра окончена! Финальный счёт: {self.score}")
         sys.exit()
 
 # Launch the adventure!
 if __name__ == "__main__":
-    print("=== 3D Adventure Quest ===")
-    print("Collect all the golden coins!")
-    print("Use WASD or arrow keys to move")
-    print("Press R to reset, ESC to exit")
-    print("Starting game...")
+    print("=== 3D Приключенческий Квест ===")
+    print("Собирай золотые монетки!")
+    print("Исследуй дома и другие постройки!")
+    print("WASD или стрелки для движения")
+    print("SPACE - прыжок")
+    print("R - перезапуск, ESC - выход")
+    print("Запуск игры...")
     
     game = AdventureGame()
     game.run()
