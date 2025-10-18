@@ -32,12 +32,21 @@ class AdventureGame(ShowBase):
         self.obstacles = []
         self.current_house = None
         
-        # Jump mechanics
+        # Jump mechanics - MULTI-JUMP FOR FLYING!
         self.is_jumping = False
         self.jump_velocity = 0
         self.gravity = -0.8
         self.jump_strength = 12
         self.ground_level = 1
+        self.jump_count = 0  # How many jumps in a row
+        self.max_jumps = 10  # Can jump many times = FLY!
+        self.last_jump_time = 0  # Time since last jump
+        
+        # Camera settings - MUCH BETTER VIEW!
+        self.camera_angle = 45  # Camera rotation angle
+        self.camera_distance = 25  # Much farther for better overview
+        self.camera_height = 12  # Higher camera
+        self.camera_rotating = False  # Auto-rotation toggle
         
         # Movement keys
         self.keys = {
@@ -578,26 +587,77 @@ class AdventureGame(ShowBase):
         print("=== Decorative objects ready ===\n")
     
     def setup_player(self):
-        """Create player character"""
+        """Create player character with texture"""
         try:
+            # Main player body with texture
             self.player = self.loader.loadModel("models/box")
             if self.player:
                 self.player.reparentTo(self.render)
                 self.player.setScale(0.8, 0.8, 1.6)
                 self.player.setPos(self.player_pos)
-                self.player.setColor(0.2, 0.5, 1, 1)
+                
+                # Apply house/brick texture to player body
+                if 'house' in self.textures:
+                    self.player.clearTexture()
+                    self.player.setTexture(self.textures['house'], 1)
+                    self.player.setTexScale(TextureStage.getDefault(), 1, 2)
+                    print("[OK] Player has brick texture!")
+                else:
+                    self.player.setColor(0.2, 0.5, 1, 1)
+                
                 self.player.setShaderAuto()
                 
-                # Add player details
+                # Head with stone texture
                 head = self.loader.loadModel("models/box")
                 if head:
                     head.reparentTo(self.player)
-                    head.setScale(0.5, 0.5, 0.5)
-                    head.setPos(0, 0, 1)
-                    head.setColor(1, 0.8, 0.6, 1)
+                    head.setScale(0.6, 0.6, 0.6)
+                    head.setPos(0, 0, 1.1)
+                    
+                    if 'stone' in self.textures:
+                        head.clearTexture()
+                        head.setTexture(self.textures['stone'], 1)
+                        head.setTexScale(TextureStage.getDefault(), 1, 1)
+                    else:
+                        head.setColor(1, 0.8, 0.6, 1)
                     head.setShaderAuto()
-        except:
-            print("Player model not available")
+                
+                # Arms with dirt texture
+                for side in [-0.5, 0.5]:
+                    arm = self.loader.loadModel("models/box")
+                    if arm:
+                        arm.reparentTo(self.player)
+                        arm.setScale(0.2, 0.2, 0.8)
+                        arm.setPos(side, 0, 0.3)
+                        
+                        if 'dirt' in self.textures:
+                            arm.clearTexture()
+                            arm.setTexture(self.textures['dirt'], 1)
+                            arm.setTexScale(TextureStage.getDefault(), 1, 2)
+                        else:
+                            arm.setColor(1, 0.8, 0.6, 1)
+                        arm.setShaderAuto()
+                
+                # Legs with grass texture
+                for side in [-0.3, 0.3]:
+                    leg = self.loader.loadModel("models/box")
+                    if leg:
+                        leg.reparentTo(self.player)
+                        leg.setScale(0.25, 0.25, 0.8)
+                        leg.setPos(side, 0, -0.8)
+                        
+                        if 'grass' in self.textures:
+                            leg.clearTexture()
+                            leg.setTexture(self.textures['grass'], 1)
+                            leg.setTexScale(TextureStage.getDefault(), 1, 2)
+                        else:
+                            leg.setColor(0.2, 0.5, 1, 1)
+                        leg.setShaderAuto()
+                
+                print("[OK] Player created with cool textures!")
+                
+        except Exception as e:
+            print(f"[ERROR] Creating player: {e}")
             self.player = None
     
     def setup_collectibles(self):
@@ -650,9 +710,7 @@ class AdventureGame(ShowBase):
         print("=== 3 COINS CREATED - SUPER EASY TO FIND! ===\n")
     
     def setup_camera(self):
-        """Setup third-person camera"""
-        self.camera_distance = 15
-        self.camera_height = 8
+        """Setup better third-person camera with rotation"""
         self.update_camera()
     
     def setup_controls(self):
@@ -680,6 +738,11 @@ class AdventureGame(ShowBase):
         # Jump control
         self.accept("space", self.jump)
         
+        # Camera rotation controls
+        self.accept("q", self.rotate_camera_left)
+        self.accept("e", self.rotate_camera_right)
+        self.accept("c", self.toggle_camera_rotation)
+        
         self.accept("escape", self.exit_game)
         self.accept("r", self.reset_game)
     
@@ -694,10 +757,10 @@ class AdventureGame(ShowBase):
         )
         
         self.instructions = OnscreenText(
-            text="WASD/Arrows: Move\\nSPACE: Jump\\nCollect BRIGHT YELLOW coins!\\nExplore houses!\\nR: Restart, ESC: Exit",
+            text="WASD/Arrows: Move\\nSPACE: Jump (SPAM to FLY HIGH!)\\nQ/E: Rotate Camera\\nC: Auto-Rotate Camera\\nCollect BRIGHT YELLOW coins!\\nR: Restart, ESC: Exit",
             style=1,
             fg=(1, 1, 1, 1),
-            pos=(-1.3, -0.7),
+            pos=(-1.3, -0.65),
             scale=0.05,
             align=TextNode.ALeft
         )
@@ -724,21 +787,64 @@ class AdventureGame(ShowBase):
         self.keys[key] = value
     
     def jump(self):
-        """Handle jump action"""
-        # Can only jump when on ground
-        if not self.is_jumping and self.player_pos.z <= self.ground_level + 0.1:
+        """Handle jump action - SPAM SPACE TO FLY HIGH!"""
+        import time
+        current_time = time.time()
+        
+        # Reset jump count if too much time passed (0.5 seconds)
+        if current_time - self.last_jump_time > 0.5:
+            self.jump_count = 0
+        
+        # Can jump multiple times in air! UNLIMITED POWER!
+        if self.jump_count < self.max_jumps:
             self.is_jumping = True
-            self.jump_velocity = self.jump_strength
-            print("Jump!")
+            # Each consecutive jump gets stronger!
+            boost = 1 + (self.jump_count * 0.3)
+            self.jump_velocity = self.jump_strength * boost
+            self.jump_count += 1
+            self.last_jump_time = current_time
+            
+            if self.jump_count == 1:
+                print("Jump!")
+            elif self.jump_count <= 3:
+                print(f"Double Jump x{self.jump_count}!")
+            elif self.jump_count <= 6:
+                print(f"FLYING x{self.jump_count}! 🚀")
+            else:
+                print(f"SUPER FLY x{self.jump_count}! ✈️ Going HIGH!")
     
     def update_camera(self):
-        """Smooth camera following"""
-        target_x = self.player_pos.x - self.camera_distance * 0.6
-        target_y = self.player_pos.y - self.camera_distance * 0.6
-        target_z = self.player_pos.z + self.camera_height
+        """Smooth camera following with rotation"""
+        # Calculate camera position based on angle
+        angle_rad = math.radians(self.camera_angle)
         
-        self.camera.setPos(target_x, target_y, target_z)
-        self.camera.lookAt(self.player_pos.x, self.player_pos.y, self.player_pos.z + 1)
+        # Camera orbits around player at angle
+        cam_x = self.player_pos.x - self.camera_distance * math.cos(angle_rad)
+        cam_y = self.player_pos.y - self.camera_distance * math.sin(angle_rad)
+        cam_z = self.player_pos.z + self.camera_height
+        
+        self.camera.setPos(cam_x, cam_y, cam_z)
+        self.camera.lookAt(self.player_pos.x, self.player_pos.y, self.player_pos.z + 2)
+    
+    def rotate_camera_left(self):
+        """Rotate camera counter-clockwise"""
+        self.camera_angle += 15
+        self.update_camera()
+        print(f"Camera angle: {self.camera_angle}")
+    
+    def rotate_camera_right(self):
+        """Rotate camera clockwise"""
+        self.camera_angle -= 15
+        self.update_camera()
+        print(f"Camera angle: {self.camera_angle}")
+    
+    def toggle_camera_rotation(self):
+        """Toggle automatic camera rotation"""
+        self.camera_rotating = not self.camera_rotating
+        if self.camera_rotating:
+            print("Auto camera rotation: ON")
+        else:
+            print("Auto camera rotation: OFF")
     
     def check_coin_collection(self):
         """Check if player collected any coins"""
@@ -858,6 +964,10 @@ class AdventureGame(ShowBase):
     
     def update_game(self, task):
         """Main game update loop"""
+        # Auto-rotate camera if enabled
+        if self.camera_rotating:
+            self.camera_angle += 0.5  # Slow smooth rotation
+        
         # Movement
         move_speed = 0.4
         new_pos = Vec3(self.player_pos)
@@ -877,14 +987,18 @@ class AdventureGame(ShowBase):
             self.jump_velocity += self.gravity
             new_pos.z += self.jump_velocity * 0.05
             
-            # Проверка приземления
+            # Check landing
             if new_pos.z <= self.ground_level:
                 new_pos.z = self.ground_level
                 self.is_jumping = False
                 self.jump_velocity = 0
+                self.jump_count = 0  # Reset jump count when landing
         else:
-            # Убедимся, что игрок на земле
+            # Make sure player is on ground
             new_pos.z = self.ground_level
+            # Reset jump count when on ground
+            if self.jump_count > 0 and self.player_pos.z <= self.ground_level + 0.1:
+                self.jump_count = 0
         
         # Check collisions before moving
         if not self.check_collision_with_obstacles(new_pos):
