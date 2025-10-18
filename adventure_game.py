@@ -108,7 +108,8 @@ class AdventureGame(ShowBase):
             'grass': 'grass.jpg',
             'dirt': 'dirt.jpg',
             'stone': 'stone.jpg',
-            'house': 'house.jpg'
+            'house': 'house.jpg',
+            'face': 'face.png'  # Face texture for player!
         }
         
         for tex_name, tex_file in texture_files.items():
@@ -612,14 +613,24 @@ class AdventureGame(ShowBase):
                 
                 self.player.setShaderAuto()
                 
-                # Head with stone texture
+                # Head with FACE texture - PERFECT SQUARE HEAD like Minecraft!
                 head = self.loader.loadModel("models/box")
                 if head:
                     head.reparentTo(self.player)
-                    head.setScale(0.6, 0.6, 0.6)
-                    head.setPos(0, 0, 1.1)
+                    # Make it PERFECTLY SQUARE - same size on all sides
+                    head.setScale(0.7, 0.7, 0.7)  # Bigger and SQUARE!
+                    head.setPos(0, 0, 1.2)
                     
-                    if 'stone' in self.textures:
+                    # Apply face texture ONLY to FRONT
+                    if 'face' in self.textures:
+                        head.clearTexture()
+                        head.setTexture(self.textures['face'], 1)
+                        # Set texture to NOT repeat - one face per side
+                        self.textures['face'].setWrapU(Texture.WMClamp)
+                        self.textures['face'].setWrapV(Texture.WMClamp)
+                        head.setTexScale(TextureStage.getDefault(), 1, 1)
+                        print("[OK] Player has SQUARE HEAD with FACE!")
+                    elif 'stone' in self.textures:
                         head.clearTexture()
                         head.setTexture(self.textures['stone'], 1)
                         head.setTexScale(TextureStage.getDefault(), 1, 1)
