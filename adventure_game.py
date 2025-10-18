@@ -42,6 +42,11 @@ class AdventureGame(ShowBase):
         self.max_jumps = 10  # Can jump many times = FLY!
         self.last_jump_time = 0  # Time since last jump
         
+        # Animation for legs
+        self.walk_animation = 0
+        self.leg_left = None
+        self.leg_right = None
+        
         # Camera settings - MUCH BETTER VIEW!
         self.camera_angle = 45  # Camera rotation angle
         self.camera_distance = 25  # Much farther for better overview
@@ -638,21 +643,34 @@ class AdventureGame(ShowBase):
                             arm.setColor(1, 0.8, 0.6, 1)
                         arm.setShaderAuto()
                 
-                # Legs with grass texture
-                for side in [-0.3, 0.3]:
-                    leg = self.loader.loadModel("models/box")
-                    if leg:
-                        leg.reparentTo(self.player)
-                        leg.setScale(0.25, 0.25, 0.8)
-                        leg.setPos(side, 0, -0.8)
-                        
-                        if 'grass' in self.textures:
-                            leg.clearTexture()
-                            leg.setTexture(self.textures['grass'], 1)
-                            leg.setTexScale(TextureStage.getDefault(), 1, 2)
-                        else:
-                            leg.setColor(0.2, 0.5, 1, 1)
-                        leg.setShaderAuto()
+                # Legs with grass texture - SAVE REFERENCES FOR ANIMATION!
+                self.leg_left = self.loader.loadModel("models/box")
+                if self.leg_left:
+                    self.leg_left.reparentTo(self.player)
+                    self.leg_left.setScale(0.25, 0.25, 0.8)
+                    self.leg_left.setPos(-0.3, 0, -0.8)
+                    
+                    if 'grass' in self.textures:
+                        self.leg_left.clearTexture()
+                        self.leg_left.setTexture(self.textures['grass'], 1)
+                        self.leg_left.setTexScale(TextureStage.getDefault(), 1, 2)
+                    else:
+                        self.leg_left.setColor(0.2, 0.5, 1, 1)
+                    self.leg_left.setShaderAuto()
+                
+                self.leg_right = self.loader.loadModel("models/box")
+                if self.leg_right:
+                    self.leg_right.reparentTo(self.player)
+                    self.leg_right.setScale(0.25, 0.25, 0.8)
+                    self.leg_right.setPos(0.3, 0, -0.8)
+                    
+                    if 'grass' in self.textures:
+                        self.leg_right.clearTexture()
+                        self.leg_right.setTexture(self.textures['grass'], 1)
+                        self.leg_right.setTexScale(TextureStage.getDefault(), 1, 2)
+                    else:
+                        self.leg_right.setColor(0.2, 0.5, 1, 1)
+                    self.leg_right.setShaderAuto()
                 
                 print("[OK] Player created with cool textures!")
                 
@@ -971,16 +989,37 @@ class AdventureGame(ShowBase):
         # Movement
         move_speed = 0.4
         new_pos = Vec3(self.player_pos)
+        is_moving = False
         
         # Handle input
         if self.keys['w'] or self.keys['up']:
             new_pos.y += move_speed
+            is_moving = True
         if self.keys['s'] or self.keys['down']:
             new_pos.y -= move_speed
+            is_moving = True
         if self.keys['a'] or self.keys['left']:
             new_pos.x -= move_speed
+            is_moving = True
         if self.keys['d'] or self.keys['right']:
             new_pos.x += move_speed
+            is_moving = True
+        
+        # ANIMATE LEGS WHEN WALKING!
+        if is_moving and self.leg_left and self.leg_right:
+            self.walk_animation += 0.3
+            # Left leg swings forward/back
+            left_swing = math.sin(self.walk_animation) * 0.15
+            self.leg_left.setY(left_swing)
+            # Right leg swings opposite
+            right_swing = math.sin(self.walk_animation + math.pi) * 0.15
+            self.leg_right.setY(right_swing)
+        else:
+            # Reset legs to center when not moving
+            if self.leg_left:
+                self.leg_left.setY(0)
+            if self.leg_right:
+                self.leg_right.setY(0)
         
         # Handle jump physics
         if self.is_jumping:
