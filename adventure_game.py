@@ -8,10 +8,10 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     AmbientLight, DirectionalLight, Vec3, Vec4, TextNode,
     CollisionTraverser, CollisionSphere, CollisionNode,
-    CollisionHandlerEvent, Texture, TextureStage
+    CollisionHandlerEvent, Texture, TextureStage, PointLight
 )
 from direct.gui.OnscreenText import OnscreenText
-from direct.interval.IntervalGlobal import Sequence, LerpHprInterval
+from direct.interval.IntervalGlobal import Sequence, LerpHprInterval, LerpPosInterval
 import sys
 import random
 import math
@@ -55,6 +55,11 @@ class AdventureGame(ShowBase):
         self.setup_camera()
         self.setup_ui()
         
+        print("\n=== GAME READY ===")
+        print("COINS are BIG, BRIGHT YELLOW and SPINNING!")
+        print("Look around - they are EASY to spot!")
+        print("==================\n")
+        
         # Start game loops
         self.taskMgr.add(self.update_game, "update_game")
         self.taskMgr.add(self.animate_scene, "animate_scene")
@@ -82,7 +87,7 @@ class AdventureGame(ShowBase):
         self.render.setLight(dlight2NP)
     
     def load_textures(self):
-        """Загрузка текстур из файлов"""
+        """Load textures from files"""
         self.textures = {}
         
         texture_files = {
@@ -94,7 +99,6 @@ class AdventureGame(ShowBase):
         
         for tex_name, tex_file in texture_files.items():
             try:
-                # Используем относительный путь для Panda3D
                 texture = self.loader.loadTexture(tex_file)
                 if texture:
                     texture.setWrapU(Texture.WMRepeat)
@@ -102,11 +106,11 @@ class AdventureGame(ShowBase):
                     texture.setMagfilter(Texture.FTLinear)
                     texture.setMinfilter(Texture.FTLinearMipmapLinear)
                     self.textures[tex_name] = texture
-                    print(f"✓ Текстура {tex_name} загружена из {tex_file}")
+                    print(f"[OK] Texture {tex_name} loaded from {tex_file}")
                 else:
-                    print(f"✗ Не удалось загрузить текстуру {tex_name}")
+                    print(f"[FAIL] Could not load texture {tex_name}")
             except Exception as e:
-                print(f"✗ Ошибка загрузки текстуры {tex_name}: {e}")
+                print(f"[ERROR] Loading texture {tex_name}: {e}")
     
     def setup_scene(self):
         """Create detailed game world"""
@@ -119,6 +123,10 @@ class AdventureGame(ShowBase):
             self.environ.setShaderAuto()
         else:
             self.create_procedural_world()
+        
+        # Always create texture showcase and decorative objects
+        self.create_texture_showcase()
+        self.create_many_decorative_objects()
     
     def create_procedural_world(self):
         """Create a procedural world when models aren't available"""
@@ -132,18 +140,18 @@ class AdventureGame(ShowBase):
                 ground.setScale(25, 25, 0.5)
                 ground.setPos(0, 0, -0.5)
                 
-                # Применяем текстуру травы
+                # Apply grass texture
                 if 'grass' in self.textures:
                     ground.clearTexture()
                     ground.setTexture(self.textures['grass'], 1)
                     ground.setTexScale(TextureStage.getDefault(), 10, 10)
-                    print("✓ Текстура травы применена к земле")
+                    print("[OK] Grass texture applied to ground")
                 else:
                     ground.setColor(0.3, 0.7, 0.3, 1)
                 
                 ground.setShaderAuto()
         except Exception as e:
-            print(f"✗ Ошибка создания земли: {e}")
+            print(f"[ERROR] Creating ground: {e}")
         
         # Create maze-like structure
         wall_positions = [
@@ -162,19 +170,17 @@ class AdventureGame(ShowBase):
                     wall.setScale(1, 1, 3)
                     wall.setPos(pos[0], pos[1], pos[2])
                     
-                    # Применяем текстуру камня к стенам
+                    # Apply stone texture to walls
                     if 'stone' in self.textures:
                         wall.clearTexture()
                         wall.setTexture(self.textures['stone'], 1)
                         wall.setTexScale(TextureStage.getDefault(), 2, 3)
-                        print("✓ Текстура камня применена к стене")
                     else:
                         wall.setColor(0.6, 0.4, 0.2, 1)
                     
                     wall.setShaderAuto()
                     self.obstacles.append(wall)
             except Exception as e:
-                print(f"✗ Ошибка создания стены: {e}")
                 continue
         
         # Decorative elements
@@ -224,55 +230,53 @@ class AdventureGame(ShowBase):
     def create_houses(self):
         """Создаём интерактивные дома"""
         house_data = [
-            {'pos': (-10, 8, 0), 'color': (0.8, 0.3, 0.2), 'name': 'Красный дом'},
-            {'pos': (10, 8, 0), 'color': (0.3, 0.5, 0.8), 'name': 'Синий дом'},
-            {'pos': (-10, -10, 0), 'color': (0.9, 0.9, 0.6), 'name': 'Жёлтый дом'},
-            {'pos': (10, -4, 0), 'color': (0.6, 0.4, 0.8), 'name': 'Фиолетовый дом'}
+            {'pos': (-10, 8, 0), 'color': (0.8, 0.3, 0.2), 'name': 'Red House'},
+            {'pos': (10, 8, 0), 'color': (0.3, 0.5, 0.8), 'name': 'Blue House'},
+            {'pos': (-10, -10, 0), 'color': (0.9, 0.9, 0.6), 'name': 'Yellow House'},
+            {'pos': (10, -4, 0), 'color': (0.6, 0.4, 0.8), 'name': 'Purple House'}
         ]
         
         self.houses = []
         
         for house_info in house_data:
             try:
-                # Основа дома
+                # House base
                 house_base = self.loader.loadModel("models/box")
                 if house_base:
                     house_base.reparentTo(self.render)
                     house_base.setScale(2.5, 2.5, 3)
                     house_base.setPos(house_info['pos'][0], house_info['pos'][1], 1.5)
                     
-                    # Применяем текстуру дома
+                    # Apply house texture
                     if 'house' in self.textures:
                         house_base.clearTexture()
                         house_base.setTexture(self.textures['house'], 1)
                         house_base.setTexScale(TextureStage.getDefault(), 1, 1)
-                        print(f"✓ Текстура применена к дому: {house_info['name']}")
                     else:
                         house_base.setColor(*house_info['color'], 1)
                     
                     house_base.setShaderAuto()
                     self.houses.append({'model': house_base, 'name': house_info['name'], 'pos': house_info['pos']})
                 
-                # Крыша
+                # Roof
                 roof = self.loader.loadModel("models/box")
                 if roof:
                     roof.reparentTo(self.render)
                     roof.setScale(3, 3, 0.5)
                     roof.setPos(house_info['pos'][0], house_info['pos'][1], 3.5)
                     
-                    # Применяем текстуру земли для крыши
+                    # Apply dirt texture for roof
                     if 'dirt' in self.textures:
                         roof.clearTexture()
                         roof.setTexture(self.textures['dirt'], 1)
                         roof.setTexScale(TextureStage.getDefault(), 2, 2)
-                        print(f"✓ Текстура крыши применена")
                     else:
                         roof.setColor(0.5, 0.2, 0.1, 1)
                     
                     roof.setHpr(0, 0, 45)
                     roof.setShaderAuto()
                 
-                # Дверь
+                # Door
                 door = self.loader.loadModel("models/box")
                 if door:
                     door.reparentTo(self.render)
@@ -281,7 +285,7 @@ class AdventureGame(ShowBase):
                     door.setColor(0.3, 0.15, 0.05, 1)
                     door.setShaderAuto()
                 
-                # Окно
+                # Window
                 window = self.loader.loadModel("models/box")
                 if window:
                     window.reparentTo(self.render)
@@ -293,27 +297,26 @@ class AdventureGame(ShowBase):
                 continue
     
     def create_fountain(self):
-        """Создаём декоративный фонтан"""
+        """Create decorative fountain"""
         try:
-            # База фонтана
+            # Fountain base
             fountain_base = self.loader.loadModel("models/box")
             if fountain_base:
                 fountain_base.reparentTo(self.render)
                 fountain_base.setScale(2, 2, 0.5)
                 fountain_base.setPos(0, 0, 0.25)
                 
-                # Применяем текстуру камня
+                # Apply stone texture
                 if 'stone' in self.textures:
                     fountain_base.clearTexture()
                     fountain_base.setTexture(self.textures['stone'], 1)
                     fountain_base.setTexScale(TextureStage.getDefault(), 2, 2)
-                    print("✓ Текстура камня применена к фонтану")
                 else:
                     fountain_base.setColor(0.4, 0.4, 0.5, 1)
                 
                 fountain_base.setShaderAuto()
             
-            # Бассейн фонтана
+            # Fountain pool
             fountain_pool = self.loader.loadModel("models/box")
             if fountain_pool:
                 fountain_pool.reparentTo(self.render)
@@ -322,14 +325,14 @@ class AdventureGame(ShowBase):
                 fountain_pool.setColor(0.3, 0.6, 0.9, 0.7)
                 fountain_pool.setShaderAuto()
             
-            # Центральная колонна
+            # Central pillar
             fountain_pillar = self.loader.loadModel("models/box")
             if fountain_pillar:
                 fountain_pillar.reparentTo(self.render)
                 fountain_pillar.setScale(0.3, 0.3, 2)
                 fountain_pillar.setPos(0, 0, 1.5)
                 
-                # Применяем текстуру камня
+                # Apply stone texture
                 if 'stone' in self.textures:
                     fountain_pillar.clearTexture()
                     fountain_pillar.setTexture(self.textures['stone'], 1)
@@ -339,7 +342,7 @@ class AdventureGame(ShowBase):
                 
                 fountain_pillar.setShaderAuto()
             
-            # Верх фонтана
+            # Fountain top
             fountain_top = self.loader.loadModel("models/box")
             if fountain_top:
                 fountain_top.reparentTo(self.render)
@@ -348,11 +351,11 @@ class AdventureGame(ShowBase):
                 fountain_top.setColor(0.2, 0.5, 0.8, 1)
                 fountain_top.setShaderAuto()
                 
-                # Анимация вращения
+                # Spinning animation
                 spin = LerpHprInterval(fountain_top, 4, Vec3(360, 0, 0))
                 spin.loop()
         except Exception as e:
-            print(f"✗ Ошибка создания фонтана: {e}")
+            pass
     
     def create_lanterns(self):
         """Создаём декоративные фонари"""
@@ -382,6 +385,198 @@ class AdventureGame(ShowBase):
             except:
                 continue
     
+    def create_texture_showcase(self):
+        """Create texture showcase with sample cubes"""
+        print("\n=== Creating texture showcase ===")
+        
+        # Position in front of player (slightly to the right and forward)
+        showcase_positions = [
+            {'pos': (3, 5, 1), 'texture': 'grass', 'name': 'Grass', 'scale': (1.5, 1.5, 1.5)},
+            {'pos': (0, 5, 1), 'texture': 'dirt', 'name': 'Dirt', 'scale': (1.5, 1.5, 1.5)},
+            {'pos': (-3, 5, 1), 'texture': 'stone', 'name': 'Stone', 'scale': (1.5, 1.5, 1.5)},
+            {'pos': (1.5, 7, 1), 'texture': 'house', 'name': 'Brick', 'scale': (1.5, 1.5, 1.5)},
+        ]
+        
+        for item in showcase_positions:
+            try:
+                # Create cube for texture demonstration
+                cube = self.loader.loadModel("models/box")
+                if cube:
+                    cube.reparentTo(self.render)
+                    cube.setScale(*item['scale'])
+                    cube.setPos(*item['pos'])
+                    
+                    # Apply texture
+                    texture_key = item['texture']
+                    if texture_key in self.textures:
+                        cube.clearTexture()
+                        cube.setTexture(self.textures[texture_key], 1)
+                        cube.setTexScale(TextureStage.getDefault(), 2, 2)
+                        cube.setShaderAuto()
+                        
+                        # Add light spinning animation for visibility
+                        spin = LerpHprInterval(cube, 8, Vec3(0, 360, 0))
+                        spin.loop()
+                    else:
+                        # If texture didn't load, make colored cube
+                        cube.setColor(0.8, 0.2, 0.2, 1)
+                        cube.setShaderAuto()
+                        
+            except Exception as e:
+                pass
+        
+        # Create large walls with textures on sides for better demonstration
+        wall_demos = [
+            {'pos': (7, 3, 2), 'texture': 'stone', 'name': 'Stone Wall', 'scale': (0.3, 3, 3)},
+            {'pos': (-7, 3, 2), 'texture': 'house', 'name': 'Brick Wall', 'scale': (0.3, 3, 3)},
+        ]
+        
+        for wall in wall_demos:
+            try:
+                wall_obj = self.loader.loadModel("models/box")
+                if wall_obj:
+                    wall_obj.reparentTo(self.render)
+                    wall_obj.setScale(*wall['scale'])
+                    wall_obj.setPos(*wall['pos'])
+                    
+                    texture_key = wall['texture']
+                    if texture_key in self.textures:
+                        wall_obj.clearTexture()
+                        wall_obj.setTexture(self.textures[texture_key], 1)
+                        wall_obj.setTexScale(TextureStage.getDefault(), 3, 3)
+                        wall_obj.setShaderAuto()
+                    else:
+                        wall_obj.setColor(0.5, 0.5, 0.5, 1)
+                        wall_obj.setShaderAuto()
+                        
+            except Exception as e:
+                pass
+        
+        # Create platform with grass texture right in front of player
+        try:
+            platform = self.loader.loadModel("models/box")
+            if platform:
+                platform.reparentTo(self.render)
+                platform.setScale(6, 4, 0.3)
+                platform.setPos(0, 5, 0.3)
+                
+                if 'grass' in self.textures:
+                    platform.clearTexture()
+                    platform.setTexture(self.textures['grass'], 1)
+                    platform.setTexScale(TextureStage.getDefault(), 4, 3)
+                    platform.setShaderAuto()
+                else:
+                    platform.setColor(0.3, 0.7, 0.3, 1)
+                    platform.setShaderAuto()
+        except Exception as e:
+            pass
+        
+        print("=== Texture showcase created ===\n")
+    
+    def create_many_decorative_objects(self):
+        """Create MANY decorative objects with different textures"""
+        print("\n=== Creating LOTS of decorative objects ===")
+        
+        # Create clay/dirt pillars
+        for i in range(15):
+            angle = (360 / 15) * i
+            radius = 15
+            x = math.cos(math.radians(angle)) * radius
+            y = math.sin(math.radians(angle)) * radius
+            
+            try:
+                pillar = self.loader.loadModel("models/box")
+                if pillar:
+                    pillar.reparentTo(self.render)
+                    height = random.uniform(2, 5)
+                    pillar.setScale(0.8, 0.8, height)
+                    pillar.setPos(x, y, height / 2)
+                    
+                    if 'dirt' in self.textures:
+                        pillar.clearTexture()
+                        pillar.setTexture(self.textures['dirt'], 1)
+                        pillar.setTexScale(TextureStage.getDefault(), 1, height)
+                    else:
+                        pillar.setColor(0.6, 0.4, 0.2, 1)
+                    pillar.setShaderAuto()
+            except:
+                pass
+        
+        # Create stone blocks scattered around
+        for i in range(20):
+            x = random.uniform(-20, 20)
+            y = random.uniform(-20, 20)
+            if abs(x) < 3 and abs(y) < 3:
+                continue
+            
+            try:
+                block = self.loader.loadModel("models/box")
+                if block:
+                    block.reparentTo(self.render)
+                    size = random.uniform(0.5, 1.5)
+                    block.setScale(size, size, size)
+                    block.setPos(x, y, size / 2)
+                    
+                    if 'stone' in self.textures:
+                        block.clearTexture()
+                        block.setTexture(self.textures['stone'], 1)
+                        block.setTexScale(TextureStage.getDefault(), 1, 1)
+                    else:
+                        block.setColor(0.5, 0.5, 0.5, 1)
+                    block.setShaderAuto()
+            except:
+                pass
+        
+        # Create brick walls
+        for i in range(8):
+            angle = (360 / 8) * i
+            radius = 12
+            x = math.cos(math.radians(angle)) * radius
+            y = math.sin(math.radians(angle)) * radius
+            
+            try:
+                wall = self.loader.loadModel("models/box")
+                if wall:
+                    wall.reparentTo(self.render)
+                    wall.setScale(2, 0.3, 2.5)
+                    wall.setPos(x, y, 1.25)
+                    
+                    if 'house' in self.textures:
+                        wall.clearTexture()
+                        wall.setTexture(self.textures['house'], 1)
+                        wall.setTexScale(TextureStage.getDefault(), 2, 2)
+                    else:
+                        wall.setColor(0.7, 0.3, 0.2, 1)
+                    wall.setShaderAuto()
+            except:
+                pass
+        
+        # Create grass platforms at different heights
+        for i in range(6):
+            x = random.uniform(-18, 18)
+            y = random.uniform(-18, 18)
+            
+            try:
+                platform = self.loader.loadModel("models/box")
+                if platform:
+                    platform.reparentTo(self.render)
+                    platform.setScale(3, 3, 0.2)
+                    height = random.uniform(0.5, 2)
+                    platform.setPos(x, y, height)
+                    
+                    if 'grass' in self.textures:
+                        platform.clearTexture()
+                        platform.setTexture(self.textures['grass'], 1)
+                        platform.setTexScale(TextureStage.getDefault(), 2, 2)
+                    else:
+                        platform.setColor(0.2, 0.6, 0.2, 1)
+                    platform.setShaderAuto()
+            except:
+                pass
+        
+        print(f"[OK] Created 49+ decorative objects with textures!")
+        print("=== Decorative objects ready ===\n")
+    
     def setup_player(self):
         """Create player character"""
         try:
@@ -406,92 +601,53 @@ class AdventureGame(ShowBase):
             self.player = None
     
     def setup_collectibles(self):
-        """Create coins and power-ups"""
+        """Create SUPER VISIBLE coins"""
+        # ONLY 3 COINS - SUPER EASY TO FIND!
         coin_positions = [
-            (4, 4, 1.5), (-4, -4, 1.5), (4, -4, 1.5), (-4, 4, 1.5),
-            (8, 0, 1.5), (-8, 0, 1.5), (0, 8, 1.5), (0, -8, 1.5),
-            (6, -2, 1.5), (-6, 2, 1.5), (2, 6, 1.5)
+            (3, 8, 2.5),   # Right in front of spawn - FIRST ONE
+            (-5, 3, 2.5),  # To the left
+            (7, -2, 2.5),  # To the right
         ]
+        
+        print("\n=== CREATING 3 SUPER VISIBLE COINS ===")
         
         for i, pos in enumerate(coin_positions):
             try:
+                # Make coin MUCH BIGGER and add a light
                 coin = self.loader.loadModel("models/box")
                 if coin:
                     coin.reparentTo(self.render)
-                    coin.setScale(0.4, 0.4, 0.1)
+                    # BIGGER SIZE - easy to see!
+                    coin.setScale(1.2, 1.2, 0.3)
                     coin.setPos(pos[0], pos[1], pos[2])
-                    # Красивый золотой цвет с блеском
-                    coin.setColor(1, 0.85, 0, 1)
+                    # BRIGHT YELLOW - impossible to miss!
+                    coin.setColor(1, 1, 0, 1)
                     coin.setShaderAuto()
                     self.coins.append(coin)
                     
-                    # Animate coin rotation
-                    spin = LerpHprInterval(coin, 2, Vec3(360, 0, 0))
+                    # Add a bright point light to each coin
+                    plight = PointLight(f'coinlight{i}')
+                    plight.setColor((1, 1, 0, 1))
+                    plnp = coin.attachNewNode(plight)
+                    self.render.setLight(plnp)
+                    
+                    # Fast spinning animation - easy to spot
+                    spin = LerpHprInterval(coin, 1, Vec3(360, 0, 0))
                     spin.loop()
-            except:
-                continue
+                    
+                    # Bobbing up and down - extra visible
+                    bob_up = LerpPosInterval(coin, 1, 
+                                            Vec3(pos[0], pos[1], pos[2] + 0.5))
+                    bob_down = LerpPosInterval(coin, 1, 
+                                              Vec3(pos[0], pos[1], pos[2]))
+                    bob_seq = Sequence(bob_up, bob_down)
+                    bob_seq.loop()
+                    
+                    print(f"[COIN {i+1}] Position: ({pos[0]}, {pos[1]}, {pos[2]}) - BIG & BRIGHT!")
+            except Exception as e:
+                print(f"[ERROR] Creating coin: {e}")
         
-        # Последняя монетка на пьедестале
-        try:
-            special_coin_pos = (-2, -6, 3.5)
-            
-            # Создаём красивый пьедестал
-            pedestal_base = self.loader.loadModel("models/box")
-            if pedestal_base:
-                pedestal_base.reparentTo(self.render)
-                pedestal_base.setScale(1.5, 1.5, 0.3)
-                pedestal_base.setPos(-2, -6, 0.3)
-                
-                # Применяем текстуру камня
-                if 'stone' in self.textures:
-                    pedestal_base.setTexture(self.textures['stone'])
-                    pedestal_base.setTexScale(TextureStage.getDefault(), 1, 1)
-                else:
-                    pedestal_base.setColor(0.3, 0.3, 0.3, 1)
-                
-                pedestal_base.setShaderAuto()
-            
-            # Столб пьедестала
-            pedestal_pillar = self.loader.loadModel("models/box")
-            if pedestal_pillar:
-                pedestal_pillar.reparentTo(self.render)
-                pedestal_pillar.setScale(0.4, 0.4, 2.5)
-                pedestal_pillar.setPos(-2, -6, 1.5)
-                
-                # Применяем текстуру камня
-                if 'stone' in self.textures:
-                    pedestal_pillar.setTexture(self.textures['stone'])
-                    pedestal_pillar.setTexScale(TextureStage.getDefault(), 1, 5)
-                else:
-                    pedestal_pillar.setColor(0.5, 0.5, 0.5, 1)
-                
-                pedestal_pillar.setShaderAuto()
-            
-            # Верхняя площадка
-            pedestal_top = self.loader.loadModel("models/box")
-            if pedestal_top:
-                pedestal_top.reparentTo(self.render)
-                pedestal_top.setScale(0.8, 0.8, 0.2)
-                pedestal_top.setPos(-2, -6, 3.2)
-                pedestal_top.setColor(0.7, 0.6, 0.2, 1)
-                pedestal_top.setShaderAuto()
-            
-            # Особая монетка
-            special_coin = self.loader.loadModel("models/box")
-            if special_coin:
-                special_coin.reparentTo(self.render)
-                special_coin.setScale(0.5, 0.5, 0.15)
-                special_coin.setPos(special_coin_pos[0], special_coin_pos[1], special_coin_pos[2])
-                # Яркий золотой цвет для особой монетки
-                special_coin.setColor(1, 0.9, 0.1, 1)
-                special_coin.setShaderAuto()
-                self.coins.append(special_coin)
-                
-                # Медленное вращение для эффектности
-                spin = LerpHprInterval(special_coin, 3, Vec3(360, 0, 0))
-                spin.loop()
-        except:
-            pass
+        print("=== 3 COINS CREATED - SUPER EASY TO FIND! ===\n")
     
     def setup_camera(self):
         """Setup third-person camera"""
@@ -538,7 +694,7 @@ class AdventureGame(ShowBase):
         )
         
         self.instructions = OnscreenText(
-            text="WASD/Arrows: Движение\\nSPACE: Прыжок\\nСобирай монетки!\\nИсследуй дома!\\nR: Перезапуск, ESC: Выход",
+            text="WASD/Arrows: Move\\nSPACE: Jump\\nCollect BRIGHT YELLOW coins!\\nExplore houses!\\nR: Restart, ESC: Exit",
             style=1,
             fg=(1, 1, 1, 1),
             pos=(-1.3, -0.7),
@@ -555,7 +711,7 @@ class AdventureGame(ShowBase):
         
         coins_left = len(self.coins)
         self.score_text = OnscreenText(
-            text=f"Очки: {self.score}\\nМонеток осталось: {coins_left}",
+            text=f"Score: {self.score}\\nCoins left: {coins_left}",
             style=1,
             fg=(1, 1, 0, 1),
             pos=(1.2, 0.8),
@@ -569,11 +725,11 @@ class AdventureGame(ShowBase):
     
     def jump(self):
         """Handle jump action"""
-        # Можно прыгать только если на земле
+        # Can only jump when on ground
         if not self.is_jumping and self.player_pos.z <= self.ground_level + 0.1:
             self.is_jumping = True
             self.jump_velocity = self.jump_strength
-            print("Прыжок!")
+            print("Jump!")
     
     def update_camera(self):
         """Smooth camera following"""
@@ -655,11 +811,11 @@ class AdventureGame(ShowBase):
             scale=0.1,
             align=TextNode.ACenter
         )
-        print("Победа! Все монетки собраны!")
+        print("VICTORY! All coins collected!")
     
     def reset_game(self):
         """Reset the game"""
-        print("Перезапуск игры...")
+        print("Restarting game...")
         self.score = 0
         self.player_pos = Vec3(0, 0, 1)
         
@@ -749,18 +905,18 @@ class AdventureGame(ShowBase):
     
     def exit_game(self):
         """Exit the game"""
-        print(f"Игра окончена! Финальный счёт: {self.score}")
+        print(f"Game Over! Final score: {self.score}")
         sys.exit()
 
 # Launch the adventure!
 if __name__ == "__main__":
-    print("=== 3D Приключенческий Квест ===")
-    print("Собирай золотые монетки!")
-    print("Исследуй дома и другие постройки!")
-    print("WASD или стрелки для движения")
-    print("SPACE - прыжок")
-    print("R - перезапуск, ESC - выход")
-    print("Запуск игры...")
+    print("=== 3D Adventure Quest ===")
+    print("Collect BRIGHT YELLOW coins!")
+    print("Explore houses and buildings!")
+    print("WASD or Arrow keys to move")
+    print("SPACE - jump")
+    print("R - restart, ESC - exit")
+    print("Starting game...")
     
     game = AdventureGame()
     game.run()
